@@ -25,19 +25,18 @@ pub mod mint_spl_token {
             token_uri,
         )
     }
-
+    
     pub fn mint_token(
         ctx: Context<MintToken>,
         amount: u64,
     ) -> Result<()> {
         mint::mint_token(ctx, amount)
     }
-
-    // pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-    //     msg!("Greetings from: {:?}", ctx.program_id);
-    //     Ok(())
-    // }
+    
+    pub fn exchange_nft_for_tokens(
+        ctx: Context<ExchangeNFTForTokens>,
+        amount: u64,
+    ) -> Result<()> {
+        exchange_nft_for_tokens::exchange_nft_for_tokens(ctx, amount)
+    }
 }
-//Applied to structs to indicate a list of accounts required by an instruction
-// #[derive(Accounts)]
-// pub struct Initialize {}
