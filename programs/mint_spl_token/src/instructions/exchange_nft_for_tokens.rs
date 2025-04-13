@@ -91,5 +91,4 @@ pub enum ErrorCode {
     NftAccountEmptyOrWrongAmount,
     #[msg("Amount calculation overflowed.")]
     AmountOverflow,
-    // Додайте інші помилки за потреби
 }

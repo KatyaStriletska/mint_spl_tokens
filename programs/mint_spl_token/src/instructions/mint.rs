@@ -17,6 +17,10 @@ pub fn mint_token(
         &ctx.accounts.associated_token_account.key()
     );
 
+    // 1. Burn NFT 
+
+    
+
     mint_to(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),

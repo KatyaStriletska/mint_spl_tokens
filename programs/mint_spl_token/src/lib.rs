@@ -6,7 +6,7 @@ use instructions::*;
 // declare_id!("CHGNy7GAQZTRVwXcD3WDwhTRrcuxhFdJSe5H1hbgyXiw");
 // declare_id!("CHGNy7GAQZTRVwXcD3WDwhTRrcuxhFdJSe5H1hbgyXiw");
 
-declare_id!("FSr2mU8qEKqwVYcFGo1H2JRSSvQ4Ln1v477Hq2kgVfN");
+declare_id!("HbaV26KFPVavib8iMm6PqybTXiMchxYUXmGkRss9AF24");
 // Specifies the module containing the program’s instruction logic
 #[program]
 pub mod mint_spl_token {
@@ -38,5 +38,20 @@ pub mod mint_spl_token {
         amount: u64,
     ) -> Result<()> {
         exchange_nft_for_tokens::exchange_nft_for_tokens(ctx, amount)
+    }
+
+    pub fn investor_vesting_tokens(
+        ctx: Context<InvestorVestingTokens>,
+        total_amount: u64,
+        vesting_duration: u64, // in seconds
+        tge_percentage: u16, // percentage in basic points! 1 % - 100 bps
+    ) -> Result<()> {
+        vesting::investor_vesting_tokens(ctx, total_amount, vesting_duration, tge_percentage)
+    }
+
+    pub fn claim_vested_tokens(
+        ctx: Context<ClaimVestedTokens>,
+    ) -> Result<()> {
+        vesting::claim_vested_tokens(ctx)
     }
 }
