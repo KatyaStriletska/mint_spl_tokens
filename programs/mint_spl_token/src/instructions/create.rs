@@ -37,11 +37,11 @@ pub fn create_token(
             name: token_name, 
             symbol: token_symbol, 
             uri: token_uri,
-            seller_fee_basis_points: 0, // роялті з продаж, автоматично сплачується творцям коли продається токен
+            seller_fee_basis_points: 0, 
             // optional
             creators: None, 
             collection: None,
-            uses: None, // не передбачено механізму обмеженого використання 
+            uses: None,
         }, 
         true,
         true,

@@ -1,12 +1,10 @@
-#![allow(clippy::result_large_err)] // лише на початку !
+#![allow(clippy::result_large_err)] 
 use anchor_lang::prelude::*;
 
 pub mod instructions;
 use instructions::*;
-// declare_id!("CHGNy7GAQZTRVwXcD3WDwhTRrcuxhFdJSe5H1hbgyXiw");
-// declare_id!("CHGNy7GAQZTRVwXcD3WDwhTRrcuxhFdJSe5H1hbgyXiw");
 
-declare_id!("HbaV26KFPVavib8iMm6PqybTXiMchxYUXmGkRss9AF24");
+declare_id!("81gGjzAisknzmYv9mUMwYyEMY8xtGtX1GQ4xtwTTVNCR");
 // Specifies the module containing the program’s instruction logic
 #[program]
 pub mod mint_spl_token {
@@ -53,5 +51,20 @@ pub mod mint_spl_token {
         ctx: Context<ClaimVestedTokens>,
     ) -> Result<()> {
         vesting::claim_vested_tokens(ctx)
+    }
+
+    pub fn burn_nft(
+        ctx: Context<BurnNft>,
+    ) -> Result<()> {
+        burn_nft::burn_nft(ctx)
+    }
+
+    pub fn start_vesting_from_vault(
+        ctx:Context<StartVestingFromVault>,
+        total_amount: u64,
+        vesting_duration: u64, 
+        tge_percentage: u16,
+    ) -> Result<()>{
+        start_vesting_from_vault::start_vesting_from_vault(ctx,total_amount,  vesting_duration, tge_percentage)
     }
 }

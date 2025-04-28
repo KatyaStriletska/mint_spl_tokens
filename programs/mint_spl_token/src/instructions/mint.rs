@@ -18,9 +18,6 @@ pub fn mint_token(
     );
 
     // 1. Burn NFT 
-
-    
-
     mint_to(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
@@ -30,7 +27,7 @@ pub fn mint_token(
                 authority: ctx.accounts.mint_authority.to_account_info(),
             },
         ),
-        amount * 10u64.pow(ctx.accounts.mint_account.decimals as u32), // Mint tokens, adjust for decimals
+        amount * 10u64.pow(ctx.accounts.mint_account.decimals as u32), 
     )?;
     msg!("Token minted successfully.");
 
@@ -50,7 +47,6 @@ pub struct MintToken<'info>{
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program:Program<'info, System>,
-    // це токен-акаунт отримувача для конкретного типу токена (mint_account)
     #[account(
         init_if_needed,
         payer = mint_authority,

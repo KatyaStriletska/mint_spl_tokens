@@ -44,7 +44,7 @@ pub fn exchange_nft_for_tokens(
                 authority: ctx.accounts.mint_authority.to_account_info(),
             },
         ),
-        amount * 10u64.pow(ctx.accounts.fungible_mint.decimals as u32), // Mint tokens, adjust for decimals
+        amount * 10u64.pow(ctx.accounts.fungible_mint.decimals as u32),
     )?;
     msg!("Token minted successfully.");
 
@@ -60,8 +60,6 @@ pub struct ExchangeNFTForTokens<'info>{
     pub fungible_mint:Account<'info, Mint>,
     #[account(mut)]
     pub investor: Signer<'info>,
-    // це токен-акаунт отримувача для конкретного типу токена (mint_account)
-    // mut
     #[account(
         init_if_needed,
         payer = investor,
@@ -75,10 +73,10 @@ pub struct ExchangeNFTForTokens<'info>{
     pub nft_mint: Account<'info, Mint>,
     // #[account(mut, has_one = investor)]
     #[account( 
-        mut, // mut, бо зменшується amount і акаунт буде закрито
-        associated_token::mint = nft_mint, // Перевірка, що ATA для правильного мінта NFT
-        associated_token::authority = investor, // Перевірка, що власник ATA - це інвестор, що підписав
-        constraint = nft_token_account.amount == 1 //@ ErrorCode::NftAccountEmptyOrWrongAmount
+        mut, 
+        associated_token::mint = nft_mint,
+        associated_token::authority = investor, 
+        constraint = nft_token_account.amount == 1 
     )]
     pub nft_token_account: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,

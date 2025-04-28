@@ -2,7 +2,7 @@ use {
     anchor_lang::prelude::*,
     anchor_spl::{
         associated_token::AssociatedToken,
-        token::{
+        token::{self,
             mint_to,
             MintTo, 
             TokenAccount, 
@@ -13,23 +13,20 @@ use {
             transfer, 
             Transfer, 
             close_account, 
-            CloseAccount
+            CloseAccount,
+            SetAuthority
         }
     },
+    spl_token::instruction::AuthorityType,
 };
 
-pub fn investor_vesting_tokens(
-    ctx:Context<InvestorVestingTokens>,
+pub fn start_vesting_from_vault(
+    ctx:Context<StartVestingFromVault>,
     total_amount: u64,
     vesting_duration: u64, // in seconds
     tge_percentage: u16, // percentage in basic points! 1 % - 100 bps
 ) -> Result<()>{
-    msg!("Minting tokens to associated token account...");
-    msg!("Mint: {}", &ctx.accounts.fungible_mint.key());
-    msg!(
-        "Token Address: {}",
-        &ctx.accounts.associated_token_account.key()
-    );
+    msg!("Starting vesting from MAIN vault...");
 
     // 0. Calculate TGE amount
     let clock = Clock::get()?;
@@ -41,9 +38,9 @@ pub fn investor_vesting_tokens(
 
     let tge_amount_native = u128::from(total_amount_native) // щоб уникнути переповнення під час множення
     // юзаємо інто для того щоб конвертувати тип значення tge_percentage в тип, який вказаний після into()
-        .checked_mul(tge_percentage.into()) // множить загальну нативну суму на вітсоток у bps
+        .checked_mul(tge_percentage.into()) 
         .unwrap_or(0)
-        .checked_div(10000) // 100% = 10000 basis points
+        .checked_div(10000) 
         .unwrap_or(0) as u64;
 
     let vesting_amount_native = total_amount_native
@@ -54,38 +51,54 @@ pub fn investor_vesting_tokens(
     msg!("TGE Amount (native): {}", tge_amount_native);
     msg!("Vesting Amount (native): {}", vesting_amount_native);
 
+    if ctx.accounts.main_token_vault.amount < total_amount_native {
+        return Err(ErrorCode::InsufficientFundsInMainVault.into());
+    }
+    let mint_key = ctx.accounts.fungible_mint.key();
+    let (_pda, authority_bump) = Pubkey::find_program_address(
+         &[b"main_vault_authority", mint_key.as_ref()], 
+         ctx.program_id 
+    );
+    let main_authority_seeds = &[
+        b"main_vault_authority".as_ref(),
+        mint_key.as_ref(),
+        &[authority_bump], 
+    ];
+    let signer_seeds = &[&main_authority_seeds[..]]; 
+
   // 3. Mint fungible tokens 
     msg!("Minting fungible tokens...");
     if tge_amount_native > 0 {
-        mint_to(
-            CpiContext::new(
+        token::transfer(
+            CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                MintTo{
-                    mint: ctx.accounts.fungible_mint.to_account_info(),
+                token::Transfer { 
+                    from: ctx.accounts.main_token_vault.to_account_info(),
                     to: ctx.accounts.associated_token_account.to_account_info(),
-                    authority: ctx.accounts.mint_authority.to_account_info(),
+                    authority: ctx.accounts.main_vault_authority.to_account_info(), // PDA авторизує
                 },
+                signer_seeds, 
             ),
             tge_amount_native,
         )?;
-        msg!("TGE Token minted successfully.");
-    } 
+        msg!("TGE tokens transferred.");
+    }
+
     if vesting_amount_native > 0 {
-        msg!("Minting vesting tokens to vault...");
-        mint_to(
-            CpiContext::new(
+        msg!("Transferring vesting tokens to individual vesting vault...");
+         token::transfer( 
+            CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                MintTo{
-                    mint: ctx.accounts.fungible_mint.to_account_info(),
-                    to: ctx.accounts.vesting_vault.to_account_info(),
-                    authority: ctx.accounts.mint_authority.to_account_info(),
+                 token::Transfer {
+                    from: ctx.accounts.main_token_vault.to_account_info(),
+                    to: ctx.accounts.vesting_vault.to_account_info(), 
+                    authority: ctx.accounts.main_vault_authority.to_account_info(), 
                 },
+                signer_seeds,
             ),
             vesting_amount_native,
         )?;
-        msg!("Vesting Token minted successfully.");
-    } else {
-        msg!("No tokens to vest.");
+        msg!("Vesting tokens transferred to vault.");
     }
 
     // 4. Create vesting account
@@ -103,7 +116,6 @@ pub fn investor_vesting_tokens(
 
     Ok(())
 }
-// бенефіціар викликає цю функцію, щоб отримати токени з вестінгу
 pub fn claim_vested_tokens(ctx: Context<ClaimVestedTokens>) -> Result<()>{
     let vesting_account = &mut ctx.accounts.vesting_account;
 
@@ -114,7 +126,6 @@ pub fn claim_vested_tokens(ctx: Context<ClaimVestedTokens>) -> Result<()>{
     if vesting_account.beneficiary != *ctx.accounts.beneficiary.key {
         return Err(ErrorCode::BeneficiaryNotFound.into());
     }
-    // (лінійний вестінг)
     let elapsed_time = current_timestamp
         .checked_sub(vesting_account.start_time)
         .unwrap_or(0);
@@ -155,7 +166,6 @@ pub fn claim_vested_tokens(ctx: Context<ClaimVestedTokens>) -> Result<()>{
     ];
     let signer_seeds = &[&seeds[..]];
 
-    // Transfer tokens to beneficiary's wallet
     let transfer_instruction = Transfer {
         from: ctx.accounts.vesting_vault.to_account_info(),
         to: ctx.accounts.beneficiary_token_account.to_account_info(),
@@ -191,10 +201,10 @@ pub struct ClaimVestedTokens<'info>{
             vesting_account.mint.as_ref() 
         ],
         bump,
-        // Можна додати close = beneficiary, щоб акаунт закрився після повного вестінгу,
         // constraint = vesting_account.beneficiary == beneficiary.key() // Додаткова перевірка
     )]
     pub vesting_account: Account<'info, VestingAccount>,
+    // PDA, який буде authority для vesting_vault
     /// CHECK: Це просто PDA, не треба читати його дані. Використовується як signer.
     #[account(
         seeds = [
@@ -205,6 +215,7 @@ pub struct ClaimVestedTokens<'info>{
         bump
     )]
     pub vault_authority: UncheckedAccount<'info>,
+    // Token Account (сховище), де зберігаються заблоковані токени (PDA)
     #[account(
         mut,
         // token::mint = fungible_mint,
@@ -221,22 +232,19 @@ pub struct ClaimVestedTokens<'info>{
     #[account(
         mut,
         associated_token::mint = vesting_account.mint, 
-        associated_token::authority = beneficiary,
+        associated_token::authority = beneficiary, 
     )]
     pub beneficiary_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>, 
     pub system_program: Program<'info, System>,
-    pub clock: Sysvar<'info, Clock>, 
+    pub clock: Sysvar<'info, Clock>,
 }
 
 
 #[derive(Accounts)]
-pub struct InvestorVestingTokens<'info>{
-    #[account(mut)]
-    pub mint_authority: Signer<'info>,
-    #[account(mut)]
+pub struct StartVestingFromVault<'info>{
     pub fungible_mint:Account<'info, Mint>,
     #[account(mut)]
     pub investor: Signer<'info>,
@@ -247,6 +255,24 @@ pub struct InvestorVestingTokens<'info>{
         associated_token::authority = investor,
     )]    
     pub associated_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut, 
+        seeds = [
+            b"main_vault", 
+            fungible_mint.key().as_ref()
+        ],
+        bump 
+    )]
+    pub main_token_vault: Account<'info, TokenAccount>,
+    /// CHECK: PDA, що авторизує перекази з main_token_vault.
+    #[account(
+        seeds = [
+            b"main_vault_authority",
+            fungible_mint.key().as_ref()
+        ],
+        bump 
+    )]
+    pub main_vault_authority: AccountInfo<'info>, 
 
     #[account(
         init_if_needed,
@@ -259,7 +285,8 @@ pub struct InvestorVestingTokens<'info>{
         bump
     )]
     pub vesting_account: Account<'info, VestingAccount>,
-    
+    // PDA, який буде authority для vesting_vault
+    /// CHECK: Це просто PDA, не треба читати його дані. Використовується як signer.
     #[account(
         seeds = [
             b"vault_authority",
@@ -275,7 +302,7 @@ pub struct InvestorVestingTokens<'info>{
         token::mint = fungible_mint,
         token::authority = vault_authority, 
         seeds = [
-            b"vault", 
+            b"vault",
             investor.key().as_ref(),
             fungible_mint.key().as_ref()
         ],
@@ -283,9 +310,12 @@ pub struct InvestorVestingTokens<'info>{
     )]
     pub vesting_vault: Account<'info, TokenAccount>,
 
+    // System programs
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program:Program<'info, System>,
+    pub clock: Sysvar<'info, Clock>, // чи треба? 
+
 }
 
 #[error_code]
@@ -300,6 +330,10 @@ pub enum ErrorCode {
     NothingToClaim,
     #[msg("Beneficiary not found.")]    
     BeneficiaryNotFound,
+    #[msg("Insufficient funds in main vault.")] 
+    InsufficientFundsInMainVault,
+    #[msg("Bump seed not found in context.")] 
+    BumpSeedNotFound,
 
 }
 
@@ -308,7 +342,7 @@ pub enum ErrorCode {
 pub struct VestingAccount {
     pub beneficiary: Pubkey,
     pub mint: Pubkey,
-    pub token_account: Pubkey,
+    pub token_account: Pubkey, 
     pub total_amount: u64,
 
     pub start_time: i64,
@@ -316,7 +350,9 @@ pub struct VestingAccount {
     pub released_amount: u64,
     pub tge_amount: u64, 
 
-   }
+    //  pub cliff_duration: u64,  
+    // pub period_length: u64,   
+}
 impl VestingAccount {
     // Приблизний розмір акаунту для розрахунку rent
     pub const LEN: usize = 8 + 32 + 32 + 32 + 8 + 8 + 8 + 8 + 8 /* + 8 + 8 */;
